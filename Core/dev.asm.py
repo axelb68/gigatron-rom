@@ -1125,7 +1125,7 @@ bra(pc()+3)                     #197
 suba(1)                         #198
 ld(0)                           #198
 st([soundTimer])                #199
-
+label('sound0')
 ld([videoSync0],OUT)            #0 <New scan line start>
 label('sound1')
 ld([channel])                   #1 Advance to next sound channel
@@ -1195,26 +1195,26 @@ st(0,[0])                       #46(!) Reinitialize carry lookup, for robustness
 
 # Update [xout] with the next sound sample every 4 scan lines.
 # Keep doing this on 'videoC equivalent' scan lines in vertical blank.
-ld([videoY])                    #47
-anda(6)                         #48
-beq('vBlankSample')             #49
-ld([sample])                    #50
-
-label('vBlankNormal')
-runVcpu(199-51, 'AB-D line 1-36')#51 Application cycles (vBlank scan lines without sound sample update)
-bra('sound1')                   #199
-ld([videoSync0],OUT)            #0 <New scan line start>
-
+anda(0x00,X)                    #47 Device 0: DAC at expansion port
+ld([sample],Y)                  #48 New sound sample is ready
+ld([videoY])                    #49
+anda(6)                         #50
+beq('vBlankSample')             #51 
+runVcpu(200-52+1, 'ABCD line 1-39',returnTo='sound1') #52
 label('vBlankSample')
-ora(0x0f)                       #51 New sound sample is ready
-anda([xoutMask])                #52
-st([xout])                      #53
-st(sample, [sample])            #54 Reset for next sample
-
-runVcpu(199-55, '--C- line 3-39')#55 Application cycles (vBlank scan lines with sound sample update)
-bra('sound1')                   #199
-ld([videoSync0],OUT)            #0 <New scan line start>
-
+ld([xoutMask])                  #53
+anda(0xf0)                      #54 
+beq(pc()+3)                     #55 Check if muted
+bra(pc()+3)                     #56
+ctrl(Y,X)                       #57 Sound to expansion port                       
+nop()                           #57(!)
+ld([sample])                    #58  
+ora(0x0f)                       #59 
+anda([xoutMask])                #60
+st([xout])                      #61
+runVcpu(198-62,'ABCD line 1-39')#62 Application cycles (vBlank scan lines with sound sample update)
+bra('sound0')                   #198
+st(sample, [sample])            #199 Reset for next sample
 #-----------------------------------------------------------------------
 
 label('.vBlankLast#32')
@@ -1324,6 +1324,7 @@ fillers(until=0xff)
 #-----------------------------------------------------------------------
 
 assert pc() == 0x1ff            # Enables runVcpu() to re-enter into the next page
+label('sound')
 bra('sound3')                   #200,0 <New scan line start>
 
 #-----------------------------------------------------------------------
@@ -1387,8 +1388,7 @@ bra(pc()+3)                     #22
 anda(63)                        #23
 ld(63)                          #23(!)
 adda([sample])                  #24
-st([sample])                    #25
-
+st([sample],Y)                  #25 Store in RAM and Y
 ld([xout])                      #26 Gets copied to XOUT
 bra([nextVideo])                #27
 ld(syncBits,OUT)                #28 End horizontal pulse
@@ -1436,7 +1436,7 @@ st([nextVideo])                 #37
 
 label('.lastpixels#34')
 if soundDiscontinuity == 1:
-  st(sample, [sample])          #34 Sound continuity
+  st(sample, [sample],Y)        #34 Sound continuity, set Y for expansion port
 else:
   nop()                         #34
 ld('videoE')                    #35 No more pixel lines to go
@@ -1469,8 +1469,17 @@ st([nextVideo])                 #37
 #
 # Alternative for pixel burst: faster application mode
 label('nopixels')
-runVcpu(200-38, 'ABCD line 40-520',
-  returnTo=0x1ff)               #38 Application interpreter (black scanlines)
+ld([nextVideo])                 #38
+suba('videoD')                  #39
+bne('nosample')                 #40
+anda(0x00,X)                    #41 Device 0: DAC at expansion port
+ctrl(Y,X)                       #42 Y was set by sound channel update
+ld([vTmp])                      #43
+label('nosample')
+ld(hi('nopixelsVcpu'),Y) 	#44
+jmp(Y,'nopixelsVcpu')           #45
+
+
 
 #-----------------------------------------------------------------------
 #
@@ -5701,6 +5710,16 @@ st([vAC+1])                          #28
 ld(hi('REENTER'),Y)                  #29
 jmp(Y,'REENTER')                     #30
 ld(-34/2)                            #31
+
+label('nopixelsVcpu')
+ld([nextVideo])                      #47,44
+suba('videoD')                       #48 
+beq('withsample')                    #49 true if called from back porch C
+wait(3)                              #50 no sample out saved three clocks
+label('withsample')
+runVcpu(200-51,                      #51
+        'ABCD line 42-520',
+        returnTo='sound') 
 
 
 #-----------------------------------------------------------------------
