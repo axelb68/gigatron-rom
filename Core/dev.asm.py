@@ -1200,7 +1200,7 @@ ld([sample],Y)                  #48 New sound sample is ready
 ld([videoY])                    #49
 anda(6)                         #50
 beq('vBlankSample')             #51 
-runVcpu(200-52+1, 'ABCD line 1-39',returnTo='sound1') #52
+runVcpu(200-52, 'ABCD line 1-39',returnTo='sound0') #52
 label('vBlankSample')
 ld([xoutMask])                  #53
 anda(0xf0)                      #54 
@@ -1396,29 +1396,32 @@ ld(syncBits,OUT)                #28 End horizontal pulse
 # Back porch B: second of 4 repeated scan lines
 # - Recompute Xi from dXi and store for retrieval in the next scan lines
 label('videoB')
-ld('videoC')                    #29 2nd scanline of 4
-st([nextVideo])                 #30
+
+
 ld(videoTable>>8,Y)             #31
 ld([videoY])                    #32
 adda(1,X)                       #33
 ld([frameX])                    #34
 adda([Y,X])                     #35
-bra([videoModeB])               #36
 st([frameX],X)                  #37 Store in RAM and X
+ld('videoC')                    #29 2nd scanline of 4
+bra([videoModeB])               #36
+st([nextVideo])                 #30
 
 # Back porch C: third of 4 repeated scan lines
 # - Nothing new to for video do as Yi and Xi are known,
 # - This is the time to emit and reset the next sound sample
 label('videoC')
-ld('videoD')                    #29 3rd scanline of 4
-st([nextVideo])                 #30
 ld([sample])                    #31 New sound sample is ready (didn't fit in the audio loop)
 ora(0x0f)                       #32
 anda([xoutMask])                #33
 st([xout])                      #34 Update [xout] with new sample (4 channels just updated)
 st(sample, [sample])            #35 Reset for next sample
-bra([videoModeC])               #36
 ld([frameX],X)                  #37
+ld('videoD')                    #29 3rd scanline of 4
+bra([videoModeC])               #36
+st([nextVideo])                 #30
+
 
 # Back porch D: last of 4 repeated scan lines
 # - Calculate the next frame index
@@ -1443,13 +1446,6 @@ ld('videoE')                    #35 No more pixel lines to go
 bra([videoModeD])               #36
 st([nextVideo])                 #37
 
-# Back porch "E": after the last line
-# - Go back and and enter vertical blank (program page 2)
-label('videoE') # Exit visible area
-ld(hi('vBlankStart'),Y)         #29 Return to vertical blank interval
-jmp(Y,'vBlankStart')            #30
-ld(syncBits)                    #31
-
 # Video mode that blacks out one or more pixel lines from the top of screen.
 # This yields some speed, but also frees up screen memory for other purposes.
 # Note: Sound output becomes choppier the more pixel lines are skipped
@@ -1466,20 +1462,26 @@ bra('nopixels')                 #36
 label('.videoF#36')
 ld('videoA')                    #36,37 Transfer to visible screen area
 st([nextVideo])                 #37
-#
+
 # Alternative for pixel burst: faster application mode
 label('nopixels')
-ld([nextVideo])                 #38
-suba('videoD')                  #39
-bne('nosample')                 #40
-anda(0x00,X)                    #41 Device 0: DAC at expansion port
-ctrl(Y,X)                       #42 Y was set by sound channel update
-ld([vTmp])                      #43
-label('nosample')
-ld(hi('nopixelsVcpu'),Y) 	#44
-jmp(Y,'nopixelsVcpu')           #45
+xora('videoD')                  #38 
+st([vTmp],X)                    #39 Set device 0 for DAC at io expansion
+beq(pc()+3)                     #40 True, if called from back porch C
+bra(pc()+3)                     #41
+nop()                           #42    Sound not yet ready
+ctrl(Y,X)                       #42(!) Sample to io expansion
+ld([vTmp])                      #43 
+ld(hi('nopixelsVcpu'),Y) 	#44 
+jmp(Y,'nopixelsVcpu')           #45 Jump out of page for space reasons
 
 
+# Back porch "E": after the last line
+# - Go back and and enter vertical blank (program page 2)
+label('videoE') # Exit visible area
+ld(hi('vBlankStart'),Y)         #29 Return to vertical blank interval
+jmp(Y,'vBlankStart')            #30
+ld(syncBits)                    #31
 
 #-----------------------------------------------------------------------
 #
@@ -5712,15 +5714,9 @@ jmp(Y,'REENTER')                     #30
 ld(-34/2)                            #31
 
 label('nopixelsVcpu')
-ld([nextVideo])                      #47,44
-suba('videoD')                       #48 
-beq('withsample')                    #49 true if called from back porch C
-wait(3)                              #50 no sample out saved three clocks
-label('withsample')
-runVcpu(200-51,                      #51
+runVcpu(200-47,                      #47
         'ABCD line 42-520',
         returnTo='sound') 
-
 
 #-----------------------------------------------------------------------
 #
