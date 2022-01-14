@@ -1200,7 +1200,8 @@ ld([sample],Y)                  #48 New sound sample is ready
 ld([videoY])                    #49
 anda(6)                         #50
 beq('vBlankSample')             #51 
-runVcpu(200-52, 'ABCD line 1-39',returnTo='sound0') #52
+runVcpu(200-52, 'ABCD line 1-39',
+        returnTo='sound0')      #52
 label('vBlankSample')
 ld([xoutMask])                  #53
 anda(0xf0)                      #54 
@@ -1396,31 +1397,29 @@ ld(syncBits,OUT)                #28 End horizontal pulse
 # Back porch B: second of 4 repeated scan lines
 # - Recompute Xi from dXi and store for retrieval in the next scan lines
 label('videoB')
-
-
-ld(videoTable>>8,Y)             #31
-ld([videoY])                    #32
-adda(1,X)                       #33
-ld([frameX])                    #34
-adda([Y,X])                     #35
-st([frameX],X)                  #37 Store in RAM and X
-ld('videoC')                    #29 2nd scanline of 4
+ld(videoTable>>8,Y)             #29
+ld([videoY])                    #30
+adda(1,X)                       #31
+ld([frameX])                    #32
+adda([Y,X])                     #33
+st([frameX],X)                  #34 Store in RAM and X
+ld('videoC')                    #35 2nd scanline of 4
 bra([videoModeB])               #36
-st([nextVideo])                 #30
+st([nextVideo])                 #37
 
 # Back porch C: third of 4 repeated scan lines
 # - Nothing new to for video do as Yi and Xi are known,
 # - This is the time to emit and reset the next sound sample
 label('videoC')
-ld([sample])                    #31 New sound sample is ready (didn't fit in the audio loop)
-ora(0x0f)                       #32
-anda([xoutMask])                #33
-st([xout])                      #34 Update [xout] with new sample (4 channels just updated)
-st(sample, [sample])            #35 Reset for next sample
-ld([frameX],X)                  #37
-ld('videoD')                    #29 3rd scanline of 4
+ld([sample])                    #29 New sound sample is ready (didn't fit in the audio loop)
+ora(0x0f)                       #30
+anda([xoutMask])                #31
+st([xout])                      #32 Update [xout] with new sample (4 channels just updated)
+st(sample, [sample])            #33 Reset for next sample
+ld([frameX],X)                  #34
+ld('videoD')                    #35 3rd scanline of 4
 bra([videoModeC])               #36
-st([nextVideo])                 #30
+st([nextVideo])                 #37
 
 
 # Back porch D: last of 4 repeated scan lines
@@ -1465,7 +1464,7 @@ st([nextVideo])                 #37
 
 # Alternative for pixel burst: faster application mode
 label('nopixels')
-xora('videoD')                  #38 
+xora('videoD')                  #38 Assume AC holds [nextVideo]
 st([vTmp],X)                    #39 Set device 0 for DAC at io expansion
 beq(pc()+3)                     #40 True, if called from back porch C
 bra(pc()+3)                     #41
