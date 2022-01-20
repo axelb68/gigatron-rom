@@ -1450,17 +1450,8 @@ st([nextVideo])                 #37
 # Note: Sound output becomes choppier the more pixel lines are skipped
 # Note: The vertical blank driver leaves 0x80 behind in [videoSync1]
 label('videoF')
-ld([videoSync1])                #29 Completely black pixel line
-adda(0x80)                      #30
-st([videoSync1],X)              #31
-ld([frameX])                    #32
-suba([X])                       #33 Decrements every two VGA scanlines
-beq('.videoF#36')               #34
-st([frameX])                    #35
-bra('nopixels')                 #36
-label('.videoF#36')
-ld('videoA')                    #36,37 Transfer to visible screen area
-st([nextVideo])                 #37
+ld(hi('videoF_'),Y) 	        #29 
+jmp(Y,'videoF_')                #30 Jump out of page for space reasons
 
 # Alternative for pixel burst: faster application mode
 label('nopixels')
@@ -1468,12 +1459,16 @@ xora('videoD')                  #38 Assume AC holds [nextVideo]
 st([vTmp],X)                    #39 Set device 0 for DAC at io expansion
 beq(pc()+3)                     #40 True, if called from back porch C
 bra(pc()+3)                     #41
-nop()                           #42    Sound not yet ready
-ctrl(Y,X)                       #42(!) Sample to io expansion
-ld([vTmp])                      #43 
-ld(hi('nopixelsVcpu'),Y) 	#44 
-jmp(Y,'nopixelsVcpu')           #45 Jump out of page for space reasons
-
+ld(0)                           #42 Sound not yet ready
+ld([xoutMask])                  #42(!)
+bmi(pc()+3)                     #43 True, if sound mask is active
+bra(pc()+3)                     #44  
+nop()                           #45
+ctrl(Y,X)                       #45(!) Sample to io expansion
+ld([vTmp])                      #46 
+runVcpu(200-47,                 #47
+        'ABCD line 42-520',
+        returnTo=0x1ff) 
 
 # Back porch "E": after the last line
 # - Go back and and enter vertical blank (program page 2)
@@ -5712,10 +5707,7 @@ ld(hi('REENTER'),Y)                  #29
 jmp(Y,'REENTER')                     #30
 ld(-34/2)                            #31
 
-label('nopixelsVcpu')
-runVcpu(200-47,                      #47
-        'ABCD line 42-520',
-        returnTo='sound') 
+
 
 #-----------------------------------------------------------------------
 #
@@ -5724,6 +5716,33 @@ runVcpu(200-47,                      #47
 #-----------------------------------------------------------------------
 
 align(0x100)
+
+label('videoF_')
+ld([videoSync1])                #32 Completely black pixel line
+adda(0x80)                      #33
+st([videoSync1],X)              #34
+ld([frameX])                    #35
+suba([X])                       #36 Decrements every two VGA scanlines
+beq('.videoF#39')               #37
+st([frameX])                    #38
+bra('nopixels_')                #39
+label('.videoF#39')
+ld('videoA')                    #39,40 Transfer to visible screen area
+st([nextVideo])                 #40
+label('nopixels_')
+xora('videoD')                  #41 Assume AC holds [nextVideo]
+st([vTmp],X)                    #42 Set device 0 for DAC at io expansion
+beq(pc()+3)                     #43 True, if called from back porch C
+bra(pc()+3)                     #44
+nop()                           #45    Sound not yet ready
+nop() #ctrl(Y,X)                       #45(!) Sample to io expansion
+ld([vTmp])                      #46 
+
+label('nopixelsVcpu')
+runVcpu(200-47,                      #47
+        'ABCD line 42-520',
+        returnTo=0x1ff) 
+nop()
 
 disableListing()
 
